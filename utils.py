@@ -69,18 +69,3 @@ class BCEDiceLoss(nn.Module):
             ignore_channels=self.ignore_channels,
         )
         return dice, bce
-
-class DICE(nn.Module):
-    __name__ = 'dice'
-
-    def __init__(self,  eps=1e-7, threshold=0.5, activation='sigmoid'):
-        super().__init__()
-        self.eps = eps
-        self.threshold = threshold
-
-    def forward(self, outputs, targets):
-        outputs = (outputs > threshold).float()
-        intersection = torch.sum(targets * outputs)
-        union = torch.sum(targets) + torch.sum(outputs)
-        dice = 2 * (intersection + eps * (union == 0)) / (union + eps)
-        return dice
