@@ -68,12 +68,12 @@ class BCEDiceLoss(nn.Module):
             threshold=self.threshold,
             ignore_channels=self.ignore_channels,
         )
-        return dice, bce
+        return dice + bce
 
 class DiceLoss(nn.Module):
     __name__ = 'dice_loss'
 
-    def __init__(self, eps=1e-7, beta=1., activation='sigmoid', ignore_channels=None, threshold=0.5):
+    def __init__(self, eps=1e-7, beta=1., activation='sigmoid', ignore_channels=None, threshold=None):
         super().__init__()
         self.beta = beta
         self.eps = eps
