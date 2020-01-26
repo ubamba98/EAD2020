@@ -10,12 +10,12 @@ def predict(X, threshold):
     return preds
 
 
-def dice(outputs ,targets ,eps = 1e-7,threshold = 0.5):
-    outputs = (outputs > threshold).float()
-    intersection = torch.sum(targets * outputs)
-    union = torch.sum(targets) + torch.sum(outputs)
-    dice = 2 * (intersection + eps * (union == 0)) / (union + eps)
-    return dice
+def single_dice_coef(y_true, y_pred_bin):
+    # shape of y_true and y_pred_bin: (height, width)
+    intersection = (y_true * y_pred_bin).sum()
+    if (y_true.sum()==0 and y_pred_bin.sum()==0):
+        return 1
+    return (2*intersection) / (y_true.sum() + y_pred_bin.sum())
 
 def metric(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
@@ -25,7 +25,7 @@ def metric(y_pred_bin, y_true, threshold = 0.5):
     mean_dice_channel = 0.
     for i in range(batch_size):
         for j in range(channel_num):
-            channel_dice = dice(y_true[i, j, ...],y_pred_bin[i, j, ...])
+            channel_dice = single_dice_coef(y_true[i, j, ...],y_pred_bin[i, j, ...])
             mean_dice_channel += channel_dice/(channel_num*batch_size)
     return mean_dice_channel
 
