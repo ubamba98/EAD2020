@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Data Folder
+EndoCV/
+models/
+logs/
+
