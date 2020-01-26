@@ -32,23 +32,30 @@ def metric_pos_neg(probability, truth, threshold=0.5, reduction='none'):
     '''Calculates dice of positive and negative images seperately'''
     '''probability and truth must be torch tensors'''
     batch_size = len(truth)
+    channels = truth.shape[1]
     with torch.no_grad():
-        probability = probability.view(batch_size, -1)
-        truth = truth.view(batch_size, -1)
+        probability = probability.view(batch_size,channels,-1)
+        truth = truth.view(batch_size,5,-1)
         assert(probability.shape == truth.shape)
-
-        p = (probability > threshold).float()
-        t = (truth > 0.5).float()
-        t_sum = t.sum(-1)
-        
-        p_sum = p.sum(-1)
-        neg_index = torch.nonzero(t_sum == 0)
-        pos_index = torch.nonzero(t_sum >= 1)
-
-        dice_neg = (p_sum == 0).float()
-        dice_pos = 2 * (p*t).sum(-1)/((p+t).sum(-1))
-        dice_neg = dice_neg[neg_index]
-        dice_pos = dice_pos[pos_index]
+        dice_pos_ = np.zeros(channels)
+        dice_neg_ = np.zeros(channels)
+        for i in range(channels):
+            p = (probability[:,i,:] > threshold).float()
+            t = (truth[:,i,:] > 0.5).float()
+            t_sum = t.sum(-1)
+            p_sum = p.sum(-1)
+            neg_index = torch.nonzero(t_sum == 0)
+            pos_index = torch.nonzero(t_sum >= 1)
+            dice_neg = (p_sum == 0).float()
+            dice_pos = 2 * (p*t).sum(-1)/((p+t).sum(-1))
+            dice_neg = dice_neg[neg_index]
+            dice_pos = dice_pos[pos_index]
+            dice_neg = np.nan_to_num(dice_neg.mean().item(), 0)
+            dice_pos = np.nan_to_num(dice_pos.mean().item(), 0)
+            dice_neg_[i]=dice_neg
+            dice_pos_[i]=dice_pos
+        dice_neg = dice_neg_.mean()
+        dice_pos = dice_pos_.mean()
     return dice_neg, dice_pos
 
 class Meter:
@@ -65,8 +72,8 @@ class Meter:
         dice_neg, dice_pos = metric_pos_neg(probs, targets, self.base_threshold)
         dice = metric(probs, targets)
         self.base_dice_scores.append(dice)
-        self.dice_neg_scores.extend(dice_neg.tolist())
-        self.dice_pos_scores.extend(dice_pos.tolist())
+        self.dice_neg_scores.append(dice_neg)
+        self.dice_pos_scores.append(dice_pos)
         preds = predict(probs, self.base_threshold)
         iou = compute_iou_batch(preds, targets, classes=[1])
         self.iou_scores.append(iou)

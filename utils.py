@@ -70,8 +70,8 @@ class BCEDiceLoss(nn.Module):
         )
         return dice, bce
 
-class DiceLoss(nn.Module):
-    __name__ = 'dice_loss'
+class DICE(nn.Module):
+    __name__ = 'dice'
 
     def __init__(self,  eps=1e-7, threshold=0.5, activation='sigmoid'):
         super().__init__()
