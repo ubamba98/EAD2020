@@ -1,4 +1,10 @@
+# Ignore warnings
+import warnings
+warnings.filterwarnings("ignore")
+
 from utils import *
+from dataset import *
+from meter import *
 
 import numpy as np
 import time
@@ -9,17 +15,19 @@ import torch.nn as nn
 from torch.nn import functional as F
 import torch.backends.cudnn as cudnn
 import pandas as pd
-from skimage import io, transform
 import tifffile as tiff
-from PIL import Image
+import torch.optim as optim
 
-# Ignore warnings
-import warnings
-warnings.filterwarnings("ignore")
+import sys
+sys.path.insert(0, 'optimizers')
+from ralamb import Ralamb
+from radam import RAdam
+from ranger import Ranger
+from lookahead import LookaheadAdam
+from over9000 import Over9000
+
+
 from tqdm import tqdm_notebook as tqdm
-import albumentations as aug
-from albumentations import (HorizontalFlip,VerticalFlip, ShiftScaleRotate, Normalize, Resize, Compose,Cutout, GaussNoise,RandomRotate90,Transpose,RandomBrightnessContrast, RandomCrop)
-from albumentations.pytorch import ToTensor
 
 class Trainer(object):
     '''This class takes care of training and validation of our model'''
@@ -59,6 +67,7 @@ class Trainer(object):
             self.optimizer = Ranger(self.net.parameters(),lr=self.lr)
         elif self.optim == 'LookaheadAdam':
             self.optimizer = LookaheadAdam(self.net.parameters(),lr=self.lr)
+
         self.scheduler = ReduceLROnPlateau(self.optimizer, factor=0.5, mode="min", patience=2, verbose=True)
         self.net = self.net.to(self.device)
         cudnn.benchmark = True
@@ -157,7 +166,7 @@ class Trainer(object):
         self.dice_scores[phase].append(dice)
         self.iou_scores[phase].append(iou)
         torch.cuda.empty_cache()
-        return epoch_loss,dice
+        return epoch_loss, dice
 
     def train_end(self):
         train_dice = self.dice_scores["train"]

@@ -60,10 +60,10 @@ class BCEDiceLoss(nn.Module):
 
     def forward(self, y_pr, y_gt):
         bce = self.bce(y_pr, y_gt)
-        y_pr = self.(y_pr)
+        y_pr = self.activation(y_pr)
         dice = 1 - smp.utils.functional.f_score(
             y_pr, y_gt,
-            beta=self.beta,activation
+            beta=self.beta,
             eps=self.eps,
             threshold=self.threshold,
             ignore_channels=self.ignore_channels,
