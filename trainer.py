@@ -31,7 +31,7 @@ from tqdm import tqdm_notebook as tqdm
 
 class Trainer(object):
     '''This class takes care of training and validation of our model'''
-    def __init__(self,model, optim, loss, lr, bs, name = ENCODER+'_'+MODEL+'_'+LOSS):
+    def __init__(self,model, optim, loss, lr, bs, name):
         self.num_workers = 4
         self.batch_size = {"train": bs, "val": bs}
         self.accumulation_steps = bs // self.batch_size['train']
