@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from sklearn.metrics import fbeta_score
 
 def predict(X, threshold):
     '''X is sigmoid output of the model'''
@@ -16,6 +17,39 @@ def single_dice_coef(y_true, y_pred_bin):
     if (y_true.sum()==0 and y_pred_bin.sum()==0):
         return 1
     return (2*intersection) / (y_true.sum() + y_pred_bin.sum())
+
+def single_f2_coef(y_true, y_pred_bin):
+    y_true = y_true.cpu().numpy()
+    y_pred_bin = y_pred_bin.cpu().numpy()
+    f2_score = fbeta_score(y_true, y_pred, beta=4)
+    return f2_score
+
+def f2_pytorch(y_true, y_pred_bin):
+
+    tp = (y_true * y_pred_bin).sum()#.to(torch.float32)
+    tn = ((1 - y_true) * (1 - y_pred_bin)).sum()#.to(torch.float32)
+    fp = ((1 - y_true) * y_pred_bin).sum()#.to(torch.float32)
+    fn = (y_true * (1 - y_pred_bin)).sum()#.to(torch.float32)
+
+    epsilon = 1e-10
+
+    precision = tp / (tp + fp + epsilon)
+    recall = tp / (tp + fn + epsilon)
+
+    f2 = 5* (precision*recall) / (4*precision + recall + epsilon)
+    return f2
+
+def f2_metric(y_pred_bin, y_true, threshold = 0.5):
+    y_pred_bin = (y_pred_bin>threshold).float()
+    y_true = y_true.float()
+    batch_size = y_true.shape[0]
+    channel_num = y_true.shape[1]
+    mean_f2_channel = 0.
+    for i in range(batch_size):
+        for j in range(channel_num):
+            channel_f2 = f2_pytorch(y_true[i, j, ...],y_pred_bin[i, j, ...])
+            mean_f2_channel += channel_f2/(channel_num*batch_size)
+    return mean_f2_channel
 
 def metric(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
@@ -67,14 +101,17 @@ class Meter:
         self.dice_neg_scores = []
         self.dice_pos_scores = []
         self.iou_scores = []
+        self.f2_scores = []
 
     def update(self, targets, outputs):
         probs = torch.sigmoid(outputs)
         dice_neg, dice_pos = metric_pos_neg(probs, targets, self.base_threshold)
         dice = metric(probs, targets)
+        f2 = f2_metric(probs, targets)
         self.base_dice_scores.append(dice)
         self.dice_neg_scores.append(dice_neg)
         self.dice_pos_scores.append(dice_pos)
+        self.f2_scores.append(f2)
         preds = predict(probs, self.base_threshold)
         iou = compute_iou_batch(preds, targets, classes=[1])
         self.iou_scores.append(iou)
@@ -83,14 +120,15 @@ class Meter:
         dice = np.mean(self.base_dice_scores)
         dice_neg = np.mean(self.dice_neg_scores)
         dice_pos = np.mean(self.dice_pos_scores)
+        f2 = np.mean(self.f2_scores)
         iou = np.nanmean(self.iou_scores)
         
-        return dice, dice_pos, dice_neg, iou
+        return dice, dice_pos, dice_neg, iou, f2
 
 def epoch_log(phase, epoch, epoch_loss, meter, start):
     '''logging the metrics at the end of an epoch'''
-    dice, dice_pos, dice_neg, iou = meter.get_metrics()
-    print("Loss: %0.4f | IoU: %0.4f | dice: %0.4f | dice_pos: %0.4f | dice_neg: %0.4f" % (epoch_loss, iou, dice, dice_pos, dice_neg))
+    dice, dice_pos, dice_neg, iou, f2 = meter.get_metrics()
+    print("Loss: %0.4f | IoU: %0.4f | dice: %0.4f | dice_pos: %0.4f | dice_neg: %0.4f | f2_score: %0.4f" % (epoch_loss, iou, dice, dice_pos, dice_neg, f2))
     return dice, iou
 
 def compute_ious(pred, label, classes, ignore_index=255, only_present=True):
