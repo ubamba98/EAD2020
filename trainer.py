@@ -53,6 +53,8 @@ class Trainer(object):
             self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
         elif self.loss == 'TVERSKY':
             self.criterion = Tversky()
+        elif self.loss == 'Dice' or self.loss == 'DICE':
+            self.criterion = DiceLoss()
         
         # Optimizers
         if self.optim == 'Over9000':
