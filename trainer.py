@@ -54,10 +54,15 @@ class Trainer(object):
             self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
         elif self.loss == 'TVERSKY':
             self.criterion = Tversky()
+
+        elif self.loss == 'Dice' or self.loss == 'DICE':
+            self.criterion = DiceLoss()
+            
         elif self.loss == 'BCE+DICE+JACCARD':
             self.criterion = BCEDiceJaccardLoss(threshold=None)
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
+
         
         # Optimizers
         if self.optim == 'Over9000':
