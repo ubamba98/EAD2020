@@ -6,6 +6,7 @@ from utils import *
 from dataset import *
 from meter import *
 
+import os
 import numpy as np
 import time
 import cv2
@@ -53,8 +54,15 @@ class Trainer(object):
             self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
         elif self.loss == 'TVERSKY':
             self.criterion = Tversky()
+
         elif self.loss == 'Dice' or self.loss == 'DICE':
             self.criterion = DiceLoss()
+            
+        elif self.loss == 'BCE+DICE+JACCARD':
+            self.criterion = BCEDiceJaccardLoss(threshold=None)
+        else:
+            raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
+
         
         # Optimizers
         if self.optim == 'Over9000':
@@ -69,7 +77,9 @@ class Trainer(object):
             self.optimizer = Ranger(self.net.parameters(),lr=self.lr)
         elif self.optim == 'LookaheadAdam':
             self.optimizer = LookaheadAdam(self.net.parameters(),lr=self.lr)
-
+        else:
+            raise(Exception(f'{self.optim} is not recognized. Please provide a valid optimizer function.'))
+            
         self.scheduler = ReduceLROnPlateau(self.optimizer, factor=0.5, mode="min", patience=2, verbose=True)
         self.net = self.net.to(self.device)
         cudnn.benchmark = True
@@ -108,9 +118,11 @@ class Trainer(object):
         images = images.to(self.device)
         masks = targets.to(self.device)
         outputs = self.net(images)
-        if self.loss == 'BCE+DICE':
-            loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
-        elif self.loss == 'TVERSKY':
+        
+#         Following two lines are commented due to redundancy. The case is already included in the else clause.
+#         if self.loss == 'BCE+DICE':
+#             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
+        if self.loss == 'TVERSKY':
             loss = self.criterion(outputs, masks)
         else: 
             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
@@ -195,6 +207,7 @@ class Trainer(object):
             if val_dice > self.best_dice:
                 print("* New optimal found, saving state *")
                 state["best_dice"] = self.best_dice = val_dice
+                os.makedirs('models/', exist_ok=True)
                 torch.save(state, 'models/'+self.name+'.pth')
             print()
             self.train_end()
