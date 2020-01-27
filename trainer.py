@@ -6,6 +6,7 @@ from utils import *
 from dataset import *
 from meter import *
 
+import os
 import numpy as np
 import time
 import cv2
@@ -201,6 +202,7 @@ class Trainer(object):
             if val_dice > self.best_dice:
                 print("* New optimal found, saving state *")
                 state["best_dice"] = self.best_dice = val_dice
+                os.makedirs('models/', exist_ok=True)
                 torch.save(state, 'models/'+self.name+'.pth')
             print()
             self.train_end()
