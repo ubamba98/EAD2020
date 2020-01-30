@@ -18,6 +18,7 @@ import torch.backends.cudnn as cudnn
 import pandas as pd
 import tifffile as tiff
 import torch.optim as optim
+import random
 
 import sys
 sys.path.insert(0, 'optimizers')
@@ -104,6 +105,14 @@ class Trainer(object):
             else:
                 param.requires_grad=False
                 
+    def seed_everything(self, seed):
+        random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+
     def load_model(self, name, path='models/'):
         state = torch.load(path+name, map_location=lambda storage, loc: storage)
         self.net.load_state_dict(state['state_dict'])
