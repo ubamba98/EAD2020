@@ -15,7 +15,7 @@ def single_dice_coef(y_true, y_pred_bin):
 def single_f2_coef(y_true, y_pred_bin):
     y_true = y_true.cpu().numpy()
     y_pred_bin = y_pred_bin.cpu().numpy()
-    f2_score = fbeta_score(y_true, y_pred, beta=2)
+    f2_score = fbeta_score(y_true, y_pred_bin, beta=2)
     return f2_score
 
 def f2_pytorch(y_true, y_pred_bin):
@@ -139,7 +139,6 @@ def soft_jaccard_score(y_pred: torch.Tensor, y_true: torch.Tensor, smooth=0.0, e
         - Output: scalar.
     """
     assert y_pred.size() == y_true.size()
-    
     bs = y_true.size(0)
     num_classes = y_pred.size(1)
     dims = (0, 2)
@@ -156,36 +155,4 @@ def soft_jaccard_score(y_pred: torch.Tensor, y_true: torch.Tensor, smooth=0.0, e
 
     union = cardinality - intersection
     jaccard_score = (intersection + smooth) / (union.clamp_min(eps) + smooth)
-    return jaccard_score
-
-    # def compute_ious(pred, label, classes, ignore_index=255, only_present=True):
-#     '''computes iou for one ground truth mask and predicted mask'''
-#     pred[label == ignore_index] = 0
-#     ious = []
-#     for c in classes:
-#         label_c = label == c
-#         if only_present and np.sum(label_c) == 0:
-#             ious.append(np.nan)
-#             continue
-#         pred_c = pred == c
-#         intersection = np.logical_and(pred_c, label_c).sum()
-#         union = np.logical_or(pred_c, label_c).sum()
-#         if union != 0:
-#             ious.append(intersection / union)
-#     return ious if ious else [1]
-
-# def compute_iou_batch(outputs, labels, classes=None):
-#     '''computes mean iou for a batch of ground truth masks and predicted masks'''
-#     ious = []
-#     preds = np.copy(outputs) # copy is imp
-#     labels = np.array(labels) # tensor to np
-#     for pred, label in zip(preds, labels):
-#         ious.append(np.nanmean(compute_ious(pred, label, classes)))
-#     iou = np.nanmean(ious)
-#     return iou
-
-# def predict(X, threshold):
-#     '''X is sigmoid output of the model'''
-#     X_p = np.copy(X)
-#     preds = (X_p > threshold).astype('uint8')
-#     return preds
+    return jaccard_score.mean().item()
