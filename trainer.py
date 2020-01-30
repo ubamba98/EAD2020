@@ -96,6 +96,10 @@ class Trainer(object):
         self.losses = {phase: [] for phase in self.phases}
         self.iou_scores = {phase: [] for phase in self.phases}
         self.dice_scores = {phase: [] for phase in self.phases}
+        self.precision = {phase: [] for phase in self.phases}
+        self.recall = {phase: [] for phase in self.phases}
+        self.dice_pos = {phase: [] for phase in self.phases}
+        self.dice_neg = {phase: [] for phase in self.phases}
         self.F2_scores = {phase: [] for phase in self.phases}
         
     def freeze(self):
@@ -184,20 +188,35 @@ class Trainer(object):
             meter.update(targets, outputs)            
             tk0.set_postfix(loss=(running_loss / ((itr + 1))))
         epoch_loss = (running_loss * self.accumulation_steps) / total_batches
-        dice, iou = epoch_log(phase, epoch, epoch_loss, meter, start)
+        dice, iou, f2, dice_pos, dice_neg, precision, recall = epoch_log(phase, epoch, epoch_loss, meter, start)
         self.losses[phase].append(epoch_loss)
         self.dice_scores[phase].append(dice)
+        self.dice_pos[phase].append(dice_pos)
+        self.dice_neg[phase].append(dice_neg)
+        self.precision[phase].append(precision)
+        self.recall[phase].append(recall)
         self.iou_scores[phase].append(iou)
+        self.F2_scores[phase].append(f2)
         torch.cuda.empty_cache()
         return epoch_loss, dice
 
     def train_end(self):
         train_dice = self.dice_scores["train"]
         train_loss = self.losses["train"]
+        train_dice_pos = self.dice_pos["train"]
+        train_dice_neg = self.dice_neg["train"]
+        train_f2 = self.F2_scores["train"]
+        train_iou = self.iou_scores["train"]
+        
         val_dice = self.dice_scores["val"]
         val_loss = self.losses["val"]
-        df_data=np.array([train_loss,train_dice,val_loss,val_dice]).T
-        df = pd.DataFrame(df_data,columns = ['train_loss','train_dice','val_loss','val_dice'])
+        val_dice_pos = self.dice_pos["val"]
+        val_dice_neg = self.dice_neg["val"]
+        val_f2 = self.F2_scores["val"]
+        val_iou = self.iou_scores["val"]
+
+        df_data=np.array([train_loss,train_dice,train_dice_pos,train_dice_neg,train_iou,train_f2,val_loss,val_dice,val_dice_pos,val_dice_neg,val_iou,val_f2]).T
+        df = pd.DataFrame(df_data,columns = ['train_loss','train_dice','train_dice_pos','train_dice_neg','train_iou','train_f2','val_loss','val_dice','val_dice_pos','val_dice_neg','val_iou','val_f2'])
         df.to_csv('logs/'+self.name+'.csv')
 
     def fit(self, epochs):

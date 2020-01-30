@@ -2,60 +2,34 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from sklearn.metrics import fbeta_score
-
-
-def single_dice_coef(y_true, y_pred_bin):
-    # shape of y_true and y_pred_bin: (height, width)
-    intersection = (y_true * y_pred_bin).sum()
-    if (y_true.sum()==0 and y_pred_bin.sum()==0):
-        return 1
-    return (2*intersection) / (y_true.sum() + y_pred_bin.sum())
-
-def single_f2_coef(y_true, y_pred_bin):
-    y_true = y_true.cpu().numpy()
-    y_pred_bin = y_pred_bin.cpu().numpy()
-    f2_score = fbeta_score(y_true, y_pred_bin, beta=2)
-    return f2_score
-
-def f2_pytorch(y_true, y_pred_bin):
-
-    tp = (y_true * y_pred_bin).sum()#.to(torch.float32)
-    tn = ((1 - y_true) * (1 - y_pred_bin)).sum()#.to(torch.float32)
-    fp = ((1 - y_true) * y_pred_bin).sum()#.to(torch.float32)
-    fn = (y_true * (1 - y_pred_bin)).sum()#.to(torch.float32)
-
-    epsilon = 1e-10
-
-    precision = tp / (tp + fp + epsilon)
-    recall = tp / (tp + fn + epsilon)
-
-    f2 = 5* (precision*recall) / (4*precision + recall + epsilon)
-    return f2
+from sklearn.metrics import fbeta_score, jaccard_score, precision_recall_fscore_support
 
 def f2_metric(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
     y_true = y_true.float()
     batch_size = y_true.shape[0]
-    channel_num = y_true.shape[1]
-    mean_f2_channel = 0.
+    Apred = ((y_pred_bin > 0).astype(np.uint8)).flatten()
+    Btrue = ((y_true > 0).astype(np.uint8)).flatten()
+    f2_score = []
+    jc_score = []
     for i in range(batch_size):
-        for j in range(channel_num):
-            channel_f2 = single_f2_coef(y_true[i, j, ...].view(-1),y_pred_bin[i, j, ...].view(-1))
-            mean_f2_channel += channel_f2/(channel_num*batch_size)
-    return mean_f2_channel
+        f2_score.append(fbeta_score(Btrue, Apred, beta=2, average='binary'))
+        jc_score.append(jaccard_score(Btrue, Apred)) 
+    return np.mean(f2_score), np.mean(jc_score)
 
-def metric(y_pred_bin, y_true, threshold = 0.5):
+def dice(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
     y_true = y_true.float()
     batch_size = y_true.shape[0]
-    channel_num = y_true.shape[1]
-    mean_dice_channel = 0.
+    dice = []
+    precision = []
+    recall = []
     for i in range(batch_size):
-        for j in range(channel_num):
-            channel_dice = single_dice_coef(y_true[i, j, ...],y_pred_bin[i, j, ...])
-            mean_dice_channel += channel_dice/(channel_num*batch_size)
-    return mean_dice_channel
+        p, r, fb_score, support = precision_recall_fscore_support( ((y_true[i]> 0).astype(np.uint8)).flatten(), ((y_pred[i]> 0).astype(np.uint8)).flatten(), average='binary')
+        dice.append(fb_score)
+        precision.append(p)
+        recall.append(r)
+    return np.mean(dice), np.mean(precision), np.mean(recall)
 
 def metric_pos_neg(probability, truth, threshold=0.5, reduction='none'):
     '''Calculates dice of positive and negative images seperately'''
@@ -96,63 +70,36 @@ class Meter:
         self.dice_pos_scores = []
         self.iou_scores = []
         self.f2_scores = []
+        self.recall = []
+        self.precision = []
+
 
     def update(self, targets, outputs):
         probs = torch.sigmoid(outputs)
         dice_neg, dice_pos = metric_pos_neg(probs, targets, self.base_threshold)
-        dice = metric(probs, targets)
-        f2 = f2_metric(probs, targets)
+        dice, p, r = dice(probs, targets)
+        f2, iou = f2_metric(probs, targets)
         self.base_dice_scores.append(dice)
+        self.precision.append(p)
+        self.recall.append(r)
         self.dice_neg_scores.append(dice_neg)
         self.dice_pos_scores.append(dice_pos)
         self.f2_scores.append(f2)
-        # preds = predict(probs, self.base_threshold)
-        iou = soft_jaccard_score(outputs, targets)
         self.iou_scores.append(iou)
 
     def get_metrics(self):
         dice = np.mean(self.base_dice_scores)
+        precision = np.mean(self.precision)
+        recall = np.mean(self.recall)
         dice_neg = np.mean(self.dice_neg_scores)
         dice_pos = np.mean(self.dice_pos_scores)
         f2 = np.mean(self.f2_scores)
         iou = np.nanmean(self.iou_scores)
         
-        return dice, dice_pos, dice_neg, iou, f2
+        return dice, dice_pos, dice_neg, iou, f2, precision, recall
 
 def epoch_log(phase, epoch, epoch_loss, meter, start):
     '''logging the metrics at the end of an epoch'''
-    dice, dice_pos, dice_neg, iou, f2 = meter.get_metrics()
-    print("Loss: %0.4f | IoU: %0.4f | dice: %0.4f | dice_pos: %0.4f | dice_neg: %0.4f | f2_score: %0.4f" % (epoch_loss, iou, dice, dice_pos, dice_neg, f2))
-    return dice, iou
-
-def soft_jaccard_score(y_pred: torch.Tensor, y_true: torch.Tensor, smooth=0.0, eps=1e-7, threshold=0.5) -> torch.Tensor:
-    """
-    :param y_pred:
-    :param y_true:
-    :param smooth:
-    :param eps:
-    :return:
-    Shape:
-        - Input: :math:`(N, NC, *)` where :math:`*` means
-            any number of additional dimensions
-        - Target: :math:`(N, NC, *)`, same shape as the input
-        - Output: scalar.
-    """
-    assert y_pred.size() == y_true.size()
-    bs = y_true.size(0)
-    num_classes = y_pred.size(1)
-    dims = (0, 2)
-    y_pred = (y_pred>threshold).float()
-    y_true = y_true.view(bs, num_classes, -1)
-    y_pred = y_pred.view(bs, num_classes, -1)
-    
-    if dims is not None:
-        intersection = torch.sum(y_pred * y_true, dim=dims)
-        cardinality = torch.sum(y_pred + y_true, dim=dims)
-    else:
-        intersection = torch.sum(y_pred * y_true)
-        cardinality = torch.sum(y_pred + y_true)
-
-    union = cardinality - intersection
-    jaccard_score = (intersection + smooth) / (union.clamp_min(eps) + smooth)
-    return jaccard_score.mean().item()
+    dice, dice_pos, dice_neg, iou, f2, precision, recall = meter.get_metrics()
+    print("Loss: %0.4f | IoU: %0.4f | dice: %0.4f | dice_pos: %0.4f | dice_neg: %0.4f | f2_score: %0.4f | precision: %0.4f | recall: %0.4f" % (epoch_loss, iou, dice, dice_pos, dice_neg, f2, precision, recall))
+    return dice, iou, f2, dice_pos, dice_neg, precision, recall
