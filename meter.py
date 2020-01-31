@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from sklearn.metrics import fbeta_score, jaccard_score, precision_recall_fscore_support
-
+from sklearn.metrics import fbeta_score, precision_recall_fscore_support
+from sklearn.metrics import jaccard_similarity_score as jaccard_score
 def f2_metric(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
     y_true = y_true.float()
