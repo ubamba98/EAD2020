@@ -54,12 +54,13 @@ class Trainer(object):
             self.criterion = torch.nn.BCEWithLogitsLoss()
         elif self.loss == 'BCE+DICE':
             self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
+            
         elif self.loss == 'TVERSKY':
             self.criterion = Tversky()
 
         elif self.loss == 'Dice' or self.loss == 'DICE':
             self.criterion = DiceLoss()
-            
+ 
         elif self.loss == 'BCE+DICE+JACCARD':
             self.criterion = BCEDiceJaccardLoss(threshold=None)
         else:
@@ -90,7 +91,7 @@ class Trainer(object):
             phase: provider(
                 phase=phase,
                 batch_size=self.batch_size[phase],
-                num_workers=1,
+                num_workers=0,
             )
             for phase in self.phases
         }
@@ -139,7 +140,7 @@ class Trainer(object):
             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
         return loss, outputs
     
-    def cutmix(self,batch, alpha):
+    def cutmix(self, batch, alpha):
         data, targets = batch
         indices = torch.randperm(data.size(0))
         shuffled_data = data[indices]
@@ -169,20 +170,25 @@ class Trainer(object):
         total_batches = len(dataloader)
         tk0 = tqdm(dataloader, total=total_batches)
         self.optimizer.zero_grad()
-        for itr, images ,targets ,pad_h ,pad_w in enumerate(tk0):
-            if phase == "train" and self.do_cutmix:
-                images, targets = self.cutmix((images,targets), 0.5)
-            loss, outputs = self.forward(images, targets)
-            loss = loss / self.accumulation_steps
-            if phase == "train":
-                loss.backward()
-                if (itr + 1 ) % self.accumulation_steps == 0:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
-            running_loss += loss.item()
-            outputs = outputs.detach().cpu()
-            meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])            
-            tk0.set_postfix(loss=(running_loss / ((itr + 1))))
+        try:
+            for itr, batch in enumerate(tk0):
+                images, targets, pad_h, pad_w = batch
+                if phase == "train" and self.do_cutmix:
+                    images, targets = self.cutmix((images, targets), 0.5)
+                loss, outputs = self.forward(images, targets)
+                loss = loss / self.accumulation_steps
+                if phase == "train":
+                    loss.backward()
+                    if (itr + 1 ) % self.accumulation_steps == 0:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+                running_loss += loss.item()
+                outputs = outputs.detach().cpu()
+                meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])
+
+                tk0.set_postfix(loss=(running_loss / ((itr + 1))))
+        except Exception as ex:
+            print("ALERT:", ex)
         epoch_loss = (running_loss * self.accumulation_steps) / total_batches
         dice, iou, f2, lb_metric = epoch_log(phase, epoch, epoch_loss, meter, start)
         self.losses[phase].append(epoch_loss)

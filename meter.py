@@ -13,8 +13,8 @@ def single_dice_coef(y_true, y_pred_bin):
     return (2*intersection) / (y_true.sum() + y_pred_bin.sum())
 
 def single_f2_coef(y_true, y_pred_bin):
-    y_true = y_true.cpu().numpy()
-    y_pred_bin = y_pred_bin.cpu().numpy()
+    y_true = y_true.cpu().numpy().reshape(-1)
+    y_pred_bin = y_pred_bin.cpu().numpy().reshape(-1)
     f2_score = fbeta_score(y_true, y_pred_bin, beta=2)
     return f2_score
 
@@ -41,7 +41,7 @@ def f2_metric_train(y_pred_bin, y_true, threshold = 0.5):
     mean_f2_channel = 0.
     for i in range(batch_size):
         for j in range(channel_num):
-            channel_f2 = single_f2_coef(y_true[i, j, ...].view(-1),y_pred_bin[i, j, ...].view(-1))
+            channel_f2 = single_f2_coef(y_true[i, j, ...],y_pred_bin[i, j, ...])
             mean_f2_channel += channel_f2/(channel_num*batch_size)
     return mean_f2_channel
 
@@ -136,8 +136,8 @@ def soft_jaccard_score(y_pred: torch.Tensor, y_true: torch.Tensor, smooth=0.0, e
     num_classes = y_pred.size(1)
     dims = (0, 2)
     y_pred = (y_pred>threshold).float()
-    y_true = y_true.view(bs, num_classes, -1)
-    y_pred = y_pred.view(bs, num_classes, -1)
+    y_true = y_true.reshape(bs, num_classes, -1)
+    y_pred = y_pred.reshape(bs, num_classes, -1)
     
     if dims is not None:
         intersection = torch.sum(y_pred * y_true, dim=dims)
