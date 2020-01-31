@@ -42,6 +42,7 @@ class Trainer(object):
         self.optim = optim
         self.num_epochs = 0
         self.best_dice = 0.
+        self.best_lb_metic = 0.
         self.phases = ["train", "val"]
         self.device = torch.device("cuda:0")
         torch.set_default_tensor_type("torch.cuda.FloatTensor")
@@ -96,11 +97,10 @@ class Trainer(object):
         self.losses = {phase: [] for phase in self.phases}
         self.iou_scores = {phase: [] for phase in self.phases}
         self.dice_scores = {phase: [] for phase in self.phases}
-        self.precision = {phase: [] for phase in self.phases}
-        self.recall = {phase: [] for phase in self.phases}
+        self.F2_scores = {phase: [] for phase in self.phases}
         self.dice_pos = {phase: [] for phase in self.phases}
         self.dice_neg = {phase: [] for phase in self.phases}
-        self.F2_scores = {phase: [] for phase in self.phases}
+        self.lb_metric = {phase: [] for phase in self.phases}
         
     def freeze(self):
         for  name, param in self.net.encoder.named_parameters():
@@ -188,17 +188,17 @@ class Trainer(object):
             meter.update(targets, outputs)            
             tk0.set_postfix(loss=(running_loss / ((itr + 1))))
         epoch_loss = (running_loss * self.accumulation_steps) / total_batches
-        dice, iou, f2, dice_pos, dice_neg, precision, recall = epoch_log(phase, epoch, epoch_loss, meter, start)
+        dice, iou, f2, dice_pos, dice_neg = epoch_log(phase, epoch, epoch_loss, meter, start)
+        lb_metric = 0.75*((dice+iou)/2) + 0.25*f2
         self.losses[phase].append(epoch_loss)
         self.dice_scores[phase].append(dice)
         self.dice_pos[phase].append(dice_pos)
         self.dice_neg[phase].append(dice_neg)
-        self.precision[phase].append(precision)
-        self.recall[phase].append(recall)
         self.iou_scores[phase].append(iou)
         self.F2_scores[phase].append(f2)
+        self.best_lb_metic[phase].append(lb_metric)
         torch.cuda.empty_cache()
-        return epoch_loss, dice
+        return epoch_loss, dice, lb_metric
 
     def train_end(self):
         train_dice = self.dice_scores["train"]
@@ -207,6 +207,7 @@ class Trainer(object):
         train_dice_neg = self.dice_neg["train"]
         train_f2 = self.F2_scores["train"]
         train_iou = self.iou_scores["train"]
+        train_lb_metric = self.lb_metric["train"]
         
         val_dice = self.dice_scores["val"]
         val_loss = self.losses["val"]
@@ -214,9 +215,10 @@ class Trainer(object):
         val_dice_neg = self.dice_neg["val"]
         val_f2 = self.F2_scores["val"]
         val_iou = self.iou_scores["val"]
+        val_lb_metric = self.lb_metric["val"]
 
-        df_data=np.array([train_loss,train_dice,train_dice_pos,train_dice_neg,train_iou,train_f2,val_loss,val_dice,val_dice_pos,val_dice_neg,val_iou,val_f2]).T
-        df = pd.DataFrame(df_data,columns = ['train_loss','train_dice','train_dice_pos','train_dice_neg','train_iou','train_f2','val_loss','val_dice','val_dice_pos','val_dice_neg','val_iou','val_f2'])
+        df_data=np.array([train_loss,train_dice,train_dice_pos,train_dice_neg,train_iou,train_f2,train_lb_metric,val_loss,val_dice,val_dice_pos,val_dice_neg,val_iou,val_f2,val_lb_metric]).T
+        df = pd.DataFrame(df_data,columns = ['train_loss','train_dice','train_dice_pos','train_dice_neg','train_iou','train_f2','train_lb_metric','val_loss','val_dice','val_dice_pos','val_dice_neg','val_iou','val_f2','val_lb_metric'])
         df.to_csv('logs/'+self.name+'.csv')
 
     def fit(self, epochs):
@@ -226,16 +228,24 @@ class Trainer(object):
             state = {
                 "epoch": epoch,
                 "best_dice": self.best_dice,
+                "best_lb_metric": self.best_lb_metric
                 "state_dict": self.net.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
             }
             with torch.no_grad():
-                val_loss, val_dice = self.iterate(epoch, "val")
+                val_loss, val_dice, val_lb_metric = self.iterate(epoch, "val")
                 self.scheduler.step(val_loss)
             if val_dice > self.best_dice:
-                print("* New optimal found, saving state *")
+                print("* New optimal found according to dice, saving state *")
                 state["best_dice"] = self.best_dice = val_dice
+                state["best_lb_metric"] = val_lb_metric
                 os.makedirs('models/', exist_ok=True)
-                torch.save(state, 'models/'+self.name+'.pth')
+                torch.save(state, 'models/'+self.name+'_best_dice.pth')
+            if val_lb_metric > self.best_lb_metric:
+                print("* New optimal found according to lb_metric, saving state *")
+                state["best_lb_metric"] = self.best_lb_metic = val_lb_metric
+                state["best_dice"] = val_dice
+                os.makedirs('models/', exist_ok=True)
+                torch.save(state, 'models/'+self.name+'_best_lb_metric.pth')
             print()
             self.train_end()
