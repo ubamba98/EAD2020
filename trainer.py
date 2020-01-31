@@ -191,7 +191,7 @@ class Trainer(object):
         self.dice_scores[phase].append(dice)
         self.iou_scores[phase].append(iou)
         self.F2_scores[phase].append(f2)
-        self.lb_metic[phase].append(lb_metric)
+        self.lb_metric[phase].append(lb_metric)
         torch.cuda.empty_cache()
         return epoch_loss, dice, lb_metric
 
@@ -215,6 +215,7 @@ class Trainer(object):
     def fit(self, epochs):
         self.num_epochs+=epochs
         for epoch in range(self.num_epochs-epochs, self.num_epochs):
+            self.net.train()
             self.iterate(epoch, "train")
             state = {
                 "epoch": epoch,
@@ -223,6 +224,7 @@ class Trainer(object):
                 "state_dict": self.net.state_dict(),
                 "optimizer": self.optimizer.state_dict(),
             }
+            self.net.eval()
             with torch.no_grad():
                 val_loss, val_dice, val_lb_metric = self.iterate(epoch, "val")
                 self.scheduler.step(val_loss)
@@ -234,7 +236,7 @@ class Trainer(object):
                 torch.save(state, 'models/'+self.name+'_best_dice.pth')
             if val_lb_metric > self.best_lb_metric:
                 print("* New optimal found according to lb_metric, saving state *")
-                state["best_lb_metric"] = self.best_lb_metic = val_lb_metric
+                state["best_lb_metric"] = self.best_lb_metric = val_lb_metric
                 state["best_dice"] = val_dice
                 os.makedirs('models/', exist_ok=True)
                 torch.save(state, 'models/'+self.name+'_best_lb_metric.pth')
