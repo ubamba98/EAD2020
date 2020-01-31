@@ -17,7 +17,7 @@ def f2_metric(y_pred_bin, y_true, threshold = 0.5):
         jc_score.append(jaccard_score(Btrue, Apred)) 
     return np.mean(f2_score), np.mean(jc_score)
 
-def dice(y_pred_bin, y_true, threshold = 0.5):
+def dice_metric(y_pred_bin, y_true, threshold = 0.5):
     y_pred_bin = (y_pred_bin>threshold).float()
     y_true = y_true.float()
     batch_size = y_true.shape[0]
@@ -77,7 +77,7 @@ class Meter:
     def update(self, targets, outputs):
         probs = torch.sigmoid(outputs)
         dice_neg, dice_pos = metric_pos_neg(probs, targets, self.base_threshold)
-        dice, p, r = dice(probs, targets)
+        dice, p, r = dice_metric(probs, targets)
         f2, iou = f2_metric(probs, targets)
         self.base_dice_scores.append(dice)
         self.precision.append(p)
