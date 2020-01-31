@@ -7,10 +7,9 @@ from albumentations.pytorch import ToTensor
 import numpy as np
 
 class EndoDataset(Dataset):
-    def __init__(self, phase, shape = 512, train_size = 474, val_size = 99):
+    def __init__(self, phase, train_size = 474, val_size = 99):
         self.transforms = get_transforms(phase)
         self.phase = phase
-        self.shape = shape
         self.train_size = train_size
         self.val_size = val_size
 
@@ -21,16 +20,22 @@ class EndoDataset(Dataset):
         else:
             mask = tiff.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/semanticMasks/EAD2020_MP1'+"{:04d}".format(idx)+'_mask.tif')
             img = cv2.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/originalImages/EAD2020_MP1'+"{:04d}".format(idx)+'.jpg')
-        img = cv2.resize(img, (self.shape,self.shape))
-        mask_re = np.zeros((5, self.shape,self.shape))
-        for i in range(5):
-            mask_re[i] = cv2.resize(mask[i], (self.shape,self.shape),interpolation = cv2.INTER_NEAREST)
-        mask = (mask_re.transpose(1,2,0) > 0).astype('int')
+        H,W,_ = img.shape
+        pad_h = 128-H%128
+        pad_w = 128-W%128
+        img = np.pad(img, ((0, pad_h),(0, pad_w),(0,0)))
+        mask = np.pad(mask, ((0,0),(0, pad_h),(0, pad_w)))
+#         img = cv2.resize(img, (self.shape,self.shape))
+#         mask_re = np.zeros((5, img.shape[0],img.shape[1]))
+#         for i in range(5):
+#             mask_re[i] = cv2.resize(mask[i], (self.shape,self.shape),interpolation = cv2.INTER_NEAREST)
+#         print(img.shape,mask.shape)
+        mask = (mask.transpose(1,2,0) > 0).astype('int')
         augmented = self.transforms(image=img, mask=mask)
         img = augmented['image']
         mask = augmented['mask']
         mask = mask[0].permute(2, 0, 1)
-        return img, mask
+        return img, mask, pad_h, pad_w
 
     def __len__(self):
         if self.phase == 'train':
@@ -64,8 +69,9 @@ def get_transforms(phase):
     list_trfms = Compose(list_transforms)
     return list_trfms
 
-def provider(phase, batch_size=8, num_workers=4):
+def provider(phase, batch_size=8, num_workers=1):
     '''Returns dataloader for the model training'''
+    batch_size = 1
     if phase == 'train':
         image_dataset = EndoDataset(phase)
     else:

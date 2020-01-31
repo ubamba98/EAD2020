@@ -34,7 +34,7 @@ from tqdm import tqdm_notebook as tqdm
 class Trainer(object):
     '''This class takes care of training and validation of our model'''
     def __init__(self,model, optim, loss, lr, bs, name):
-        self.num_workers = 4
+        self.num_workers = 1
         self.batch_size = {"train": bs, "val": bs}
         self.accumulation_steps = bs // self.batch_size['train']
         self.lr = lr
@@ -90,7 +90,7 @@ class Trainer(object):
             phase: provider(
                 phase=phase,
                 batch_size=self.batch_size[phase],
-                num_workers=self.num_workers,
+                num_workers=1,
             )
             for phase in self.phases
         }
@@ -169,11 +169,9 @@ class Trainer(object):
         total_batches = len(dataloader)
         tk0 = tqdm(dataloader, total=total_batches)
         self.optimizer.zero_grad()
-        for itr, batch in enumerate(tk0):
+        for itr, images ,targets ,pad_h ,pad_w in enumerate(tk0):
             if phase == "train" and self.do_cutmix:
-                images, targets = self.cutmix(batch, 0.5)
-            else:
-                images, targets = batch
+                images, targets = self.cutmix((images,targets), 0.5)
             loss, outputs = self.forward(images, targets)
             loss = loss / self.accumulation_steps
             if phase == "train":
@@ -183,7 +181,7 @@ class Trainer(object):
                     self.optimizer.zero_grad()
             running_loss += loss.item()
             outputs = outputs.detach().cpu()
-            meter.update(targets, outputs)            
+            meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])            
             tk0.set_postfix(loss=(running_loss / ((itr + 1))))
         epoch_loss = (running_loss * self.accumulation_steps) / total_batches
         dice, iou, f2, lb_metric = epoch_log(phase, epoch, epoch_loss, meter, start)
