@@ -25,7 +25,7 @@ def dice_metric(y_pred_bin, y_true, threshold = 0.5):
     precision = []
     recall = []
     for i in range(batch_size):
-        p, r, fb_score, support = precision_recall_fscore_support( ((y_true[i]> 0).astype(np.uint8)).flatten(), ((y_pred[i]> 0).astype(np.uint8)).flatten(), average='binary')
+        p, r, fb_score, support = precision_recall_fscore_support( ((y_true[i]> 0).astype(np.uint8)).flatten(), ((y_pred_bin[i]> 0).astype(np.uint8)).flatten(), average='binary')
         dice.append(fb_score)
         precision.append(p)
         recall.append(r)
