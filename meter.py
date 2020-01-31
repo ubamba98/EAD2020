@@ -5,8 +5,8 @@ from torch.nn import functional as F
 from sklearn.metrics import fbeta_score, precision_recall_fscore_support
 from sklearn.metrics import jaccard_similarity_score as jaccard_score
 def f2_metric(y_pred_bin, y_true, threshold = 0.5):
-    y_pred_bin = (y_pred_bin>threshold).float()
-    y_true = y_true.float()
+    y_pred_bin = (y_pred_bin>threshold).float().detach().cpu().numpy()
+    y_true = y_true.float().detach().cpu().numpy()
     batch_size = y_true.shape[0]
     Apred = ((y_pred_bin > 0).astype(np.uint8)).flatten()
     Btrue = ((y_true > 0).astype(np.uint8)).flatten()
@@ -18,8 +18,8 @@ def f2_metric(y_pred_bin, y_true, threshold = 0.5):
     return np.mean(f2_score), np.mean(jc_score)
 
 def dice_metric(y_pred_bin, y_true, threshold = 0.5):
-    y_pred_bin = (y_pred_bin>threshold).float()
-    y_true = y_true.float()
+    y_pred_bin = (y_pred_bin>threshold).float().detach().cpu().numpy()
+    y_true = y_true.float().detach().cpu().numpy()
     batch_size = y_true.shape[0]
     dice = []
     precision = []
