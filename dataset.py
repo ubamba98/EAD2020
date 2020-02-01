@@ -22,23 +22,34 @@ class EndoDataset(Dataset):
         else:
             mask = tiff.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/semanticMasks/EAD2020_MP1'+"{:04d}".format(idx)+'_mask.tif')
             img = cv2.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/originalImages/EAD2020_MP1'+"{:04d}".format(idx)+'.jpg')
-        if img.shape[0]<self.shape or img.shape[1]<self.shape:
-            (h, w) = img.shape[:2]
-            if h>w:
-                re_w = self.shape+12
-                r = float(re_w)/ w 
-                dim = (re_w, int(h * r))
+
+        if self.phase == 'train':
+            if img.shape[0]<self.shape or img.shape[1]<self.shape:
+                (h, w) = img.shape[:2]
+                if h>w:
+                    re_w = self.shape+12
+                    r = float(re_w)/ w 
+                    dim = (re_w, int(h * r))
+                else:
+                    re_h = self.shape+12
+                    r = float(re_h)/ h 
+                    dim = (int(w * r), re_h)
+                img = cv2.resize(img, dim)
+                mask_re = np.zeros((5, dim[1], dim[0]))
+                for i in range(5):
+                    mask_re[i] = cv2.resize(mask[i], dim, interpolation = cv2.INTER_NEAREST)
+                mask = (mask_re.transpose(1,2,0) > 0).astype('int')
             else:
-                re_h = self.shape+12
-                r = float(re_h)/ h 
-                dim = (int(w * r), re_h)
-            img = cv2.resize(img, dim)
-            mask_re = np.zeros((5, dim[1], dim[0]))
-            for i in range(5):
-                mask_re[i] = cv2.resize(mask[i], dim, interpolation = cv2.INTER_NEAREST)
-            mask = (mask_re.transpose(1,2,0) > 0).astype('int')
+                mask = (mask.transpose(1,2,0) > 0).astype('int')
         else:
-            mask = (mask.transpose(1,2,0) > 0).astype('int')
+            (H, W) = img.shape[:2]
+            mask = mask[:5, ...]
+            pad_h = 0 if (H%128)==0 else 128-(H%128)
+            pad_w = 0 if (W%128)==0 else 128-(W%128)
+            img = np.pad(img, ((0, pad_h), (0, pad_w), (0, 0)))
+            mask = np.pad(mask, ((0, 0), (0, pad_h), (0, pad_w)))
+            mask = (mask.transpose(1, 2, 0) > 0).astype('int')
+        
         augmented = self.transforms(image=img, mask=mask)
         img = augmented['image']
         mask = augmented['mask']
@@ -68,16 +79,16 @@ def get_transforms(phase, crop_type=0, size=512):
                     aug.GaussNoise(p=.35),
                     ], p=.5),
             ])
-    if crop_type==0:
-        list_transforms.extend([
-            CropNonEmptyMaskIfExists(size, size)
-        ])
-    
-    elif crop_type==1:
-        list_transforms.extend([
-            RandomResizedCrop(size, size, scale=1, ratio=1)
-        ])
-    
+        if crop_type==0:
+            list_transforms.extend([
+                CropNonEmptyMaskIfExists(size, size)
+            ])
+
+        elif crop_type==1:
+            list_transforms.extend([
+                RandomResizedCrop(size, size, scale=1, ratio=1)
+            ])
+
     list_transforms.extend(
         [
             Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225], p=1),

@@ -35,7 +35,7 @@ class Trainer(object):
     '''This class takes care of training and validation of our model'''
     def __init__(self,model, optim, loss, lr, bs, name, shape=512, crop_type=0):
         self.num_workers = 4
-        self.batch_size = {"train": bs, "val": bs}
+        self.batch_size = {"train": bs, "val": 1}
         self.accumulation_steps = bs // self.batch_size['train']
         self.lr = lr
         self.loss = loss
@@ -65,7 +65,6 @@ class Trainer(object):
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
 
-        
         # Optimizers
         if self.optim == 'Over9000':
             self.optimizer = Over9000(self.net.parameters(),lr=self.lr)
@@ -92,7 +91,7 @@ class Trainer(object):
                 shape=shape,
                 crop_type=crop_type,
                 batch_size=self.batch_size[phase],
-                num_workers=self.num_workers,
+                num_workers=self.num_workers if phase=='train' else 0,
             )
             for phase in self.phases
         }
@@ -114,10 +113,11 @@ class Trainer(object):
                 shape=shape,
                 crop_type=crop_type,
                 batch_size=self.batch_size[phase],
-                num_workers=self.num_workers,
+                num_workers=self.num_workers if phase=='train' else 0,
             )
             for phase in self.phases
         }
+
     def freeze(self):
         for  name, param in self.net.encoder.named_parameters():
             if name.find('bn') != -1:
@@ -147,7 +147,8 @@ class Trainer(object):
         images = images.to(self.device)
         masks = targets.to(self.device)
         outputs = self.net(images)
-        
+#         print(outputs.shape, masks.shape)
+
 #         Following two lines are commented due to redundancy. The case is already included in the else clause.
 #         if self.loss == 'BCE+DICE':
 #             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
@@ -192,6 +193,7 @@ class Trainer(object):
                 images, targets = self.cutmix(batch, 0.5)
             else:
                 images, targets = batch
+                
             loss, outputs = self.forward(images, targets)
             loss = loss / self.accumulation_steps
             if phase == "train":
