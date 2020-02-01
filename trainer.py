@@ -81,7 +81,7 @@ class Trainer(object):
         else:
             raise(Exception(f'{self.optim} is not recognized. Please provide a valid optimizer function.'))
             
-        self.scheduler = ReduceLROnPlateau(self.optimizer, factor=0.5, mode="min", patience=2, verbose=True)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, factor=0.5, mode="min", patience=4, verbose=True, min_lr = 1e-5)
         self.net = self.net.to(self.device)
         cudnn.benchmark = True
         
