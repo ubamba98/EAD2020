@@ -33,7 +33,7 @@ from tqdm import tqdm_notebook as tqdm
 
 class Trainer(object):
     '''This class takes care of training and validation of our model'''
-    def __init__(self,model, optim, loss, lr, bs, name):
+    def __init__(self,model, optim, loss, lr, bs, name, shape=512, crop_type=0):
         self.num_workers = 4
         self.batch_size = {"train": bs, "val": bs}
         self.accumulation_steps = bs // self.batch_size['train']
@@ -89,6 +89,8 @@ class Trainer(object):
         self.dataloaders = {
             phase: provider(
                 phase=phase,
+                shape=shape,
+                crop_type=crop_type,
                 batch_size=self.batch_size[phase],
                 num_workers=self.num_workers,
             )
@@ -99,7 +101,23 @@ class Trainer(object):
         self.dice_scores = {phase: [] for phase in self.phases}
         self.F2_scores = {phase: [] for phase in self.phases}
         self.lb_metric = {phase: [] for phase in self.phases}
-        
+    
+    def change_loader(self, crop_type=0, shape=512):
+        '''
+        crop_type -- 0 (CropNonEmptyMaskIfExists)
+                  -- 1 (RandomResizedCrop)
+        shape     -- 512 (default)
+        '''
+        self.dataloaders = {
+            phase: provider(
+                phase=phase,
+                shape=shape,
+                crop_type=crop_type,
+                batch_size=self.batch_size[phase],
+                num_workers=self.num_workers,
+            )
+            for phase in self.phases
+        }
     def freeze(self):
         for  name, param in self.net.encoder.named_parameters():
             if name.find('bn') != -1:

@@ -2,13 +2,14 @@ import cv2
 import tifffile as tiff
 from torch.utils.data import Dataset, DataLoader, sampler
 import albumentations as aug
-from albumentations import (HorizontalFlip,VerticalFlip, ShiftScaleRotate, Normalize, Resize, Compose,Cutout, GaussNoise,RandomRotate90,Transpose,RandomBrightnessContrast, RandomCrop)
+from albumentations import (HorizontalFlip, VerticalFlip, ShiftScaleRotate, Normalize, Resize, Compose,Cutout, GaussNoise, RandomRotate90, Transpose, RandomBrightnessContrast, RandomCrop)
 from albumentations.pytorch import ToTensor
+from albumentations.augmentations.transforms import CropNonEmptyMaskIfExists, RandomResizedCrop
 import numpy as np
 
 class EndoDataset(Dataset):
-    def __init__(self, phase, shape = 512, train_size = 474, val_size = 99):
-        self.transforms = get_transforms(phase)
+    def __init__(self, phase, shape = 512, crop_type=0, train_size = 474, val_size = 99):
+        self.transforms = get_transforms(phase, crop_type=crop_type, size=shape)
         self.phase = phase
         self.shape = shape
         self.train_size = train_size
@@ -21,11 +22,23 @@ class EndoDataset(Dataset):
         else:
             mask = tiff.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/semanticMasks/EAD2020_MP1'+"{:04d}".format(idx)+'_mask.tif')
             img = cv2.imread('./EndoCV/EAD2020-Phase-II-Segmentation-VALIDATION/originalImages/EAD2020_MP1'+"{:04d}".format(idx)+'.jpg')
-        img = cv2.resize(img, (self.shape,self.shape))
-        mask_re = np.zeros((5, self.shape,self.shape))
-        for i in range(5):
-            mask_re[i] = cv2.resize(mask[i], (self.shape,self.shape),interpolation = cv2.INTER_NEAREST)
-        mask = (mask_re.transpose(1,2,0) > 0).astype('int')
+        if img.shape[0]<self.shape or img.shape[1]<self.shape:
+            (h, w) = img.shape[:2]
+            if h>w:
+                re_w = self.shape+12
+                r = float(re_w)/ w 
+                dim = (re_w, int(h * r))
+            else:
+                re_h = self.shape+12
+                r = float(re_h)/ h 
+                dim = (int(w * r), re_h)
+            img = cv2.resize(img, dim)
+            mask_re = np.zeros((5, dim[1], dim[0]))
+            for i in range(5):
+                mask_re[i] = cv2.resize(mask[i], dim, interpolation = cv2.INTER_NEAREST)
+            mask = (mask_re.transpose(1,2,0) > 0).astype('int')
+        else:
+            mask = (mask.transpose(1,2,0) > 0).astype('int')
         augmented = self.transforms(image=img, mask=mask)
         img = augmented['image']
         mask = augmented['mask']
@@ -38,23 +51,33 @@ class EndoDataset(Dataset):
         else:
             return self.val_size
 
-def get_transforms(phase):
+def get_transforms(phase, crop_type=0, size=512):
     list_transforms = []
     if phase == "train":
         list_transforms.extend([
-     aug.Flip(),
-     aug.Cutout(num_holes=4, p=0.5),
-     aug.OneOf([
-         aug.RandomContrast(),
-         aug.RandomGamma(),
-         aug.RandomBrightness(),
-         ], p=1),
+             aug.Flip(),
+             aug.Cutout(num_holes=4, p=0.5),
+             aug.OneOf([
+                 aug.RandomContrast(),
+                 aug.RandomGamma(),
+                 aug.RandomBrightness(),
+                 ], p=1),
 
-     aug.ShiftScaleRotate(rotate_limit=90),
-     aug.OneOf([
-            aug.GaussNoise(p=.35),
-            ], p=.5),
-    ])
+             aug.ShiftScaleRotate(rotate_limit=90),
+             aug.OneOf([
+                    aug.GaussNoise(p=.35),
+                    ], p=.5),
+            ])
+    if crop_type==0:
+        list_transforms.extend([
+            CropNonEmptyMaskIfExists(size, size)
+        ])
+    
+    elif crop_type==1:
+        list_transforms.extend([
+            RandomResizedCrop(size, size, scale=1, ratio=1)
+        ])
+    
     list_transforms.extend(
         [
             Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225], p=1),
@@ -64,12 +87,12 @@ def get_transforms(phase):
     list_trfms = Compose(list_transforms)
     return list_trfms
 
-def provider(phase, batch_size=8, num_workers=4):
+def provider(phase, shape, crop_type, batch_size=8, num_workers=4):
     '''Returns dataloader for the model training'''
     if phase == 'train':
-        image_dataset = EndoDataset(phase)
+        image_dataset = EndoDataset(phase, shape=shape, crop_type=crop_type)
     else:
-        image_dataset = EndoDataset(phase)
+        image_dataset = EndoDataset(phase, shape=shape, crop_type=crop_type)
         
     dataloader = DataLoader(
         image_dataset,
