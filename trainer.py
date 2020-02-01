@@ -192,8 +192,7 @@ class Trainer(object):
             if phase == "train" and self.do_cutmix:
                 images, targets = self.cutmix(batch, 0.5)
             else:
-                images, targets = batch
-                
+                images, targets, pad_h, pad_w = batch
             loss, outputs = self.forward(images, targets)
             loss = loss / self.accumulation_steps
             if phase == "train":
@@ -203,7 +202,10 @@ class Trainer(object):
                     self.optimizer.zero_grad()
             running_loss += loss.item()
             outputs = outputs.detach().cpu()
-            meter.update(targets, outputs)            
+            if phase == 'train':
+                meter.update(targets, outputs)
+            else:
+                meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])
             tk0.set_postfix(loss=(running_loss / ((itr + 1))))
         epoch_loss = (running_loss * self.accumulation_steps) / total_batches
         dice, iou, f2, lb_metric = epoch_log(phase, epoch, epoch_loss, meter, start)

@@ -54,7 +54,10 @@ class EndoDataset(Dataset):
         img = augmented['image']
         mask = augmented['mask']
         mask = mask[0].permute(2, 0, 1)
-        return img, mask
+        if self.phase == 'train':
+            return img, mask
+        else:
+            return img,mask,pad_h,pad_w
 
     def __len__(self):
         if self.phase == 'train':
@@ -102,14 +105,16 @@ def provider(phase, shape, crop_type, batch_size=8, num_workers=4):
     '''Returns dataloader for the model training'''
     if phase == 'train':
         image_dataset = EndoDataset(phase, shape=shape, crop_type=crop_type)
+        pin = True
     else:
         image_dataset = EndoDataset(phase, shape=shape, crop_type=crop_type)
+        pin = False
         
     dataloader = DataLoader(
         image_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=pin,
         shuffle=True,   
     )
 
