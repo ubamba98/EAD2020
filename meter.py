@@ -15,7 +15,9 @@ def single_dice_coef(y_true, y_pred_bin):
 def single_f2_coef(y_true, y_pred_bin):
     y_true = y_true.cpu().numpy()
     y_pred_bin = y_pred_bin.cpu().numpy()
-    f2_score = fbeta_score(y_true, y_pred_bin, beta=2)
+    Apred = ((y_pred_bin > 0).astype(np.uint8))
+    Btrue = ((y_true > 0).astype(np.uint8))
+    f2_score = fbeta_score(Btrue, Apred, beta=2)
     return f2_score
 
 def f2_pytorch_train(y_true, y_pred_bin):
