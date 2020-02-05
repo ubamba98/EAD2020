@@ -154,10 +154,7 @@ class Trainer(object):
 #         Following two lines are commented due to redundancy. The case is already included in the else clause.
 #         if self.loss == 'BCE+DICE':
 #             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
-        if self.loss == 'TVERSKY':
-            loss = self.criterion(outputs, masks)
-        else: 
-            loss = self.criterion(outputs.permute(0,2,3,1).contiguous(), masks.permute(0,2,3,1).contiguous())
+        loss = self.criterion(outputs, masks)
         return loss, outputs
     
     def cutmix(self,batch, alpha):
