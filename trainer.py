@@ -27,6 +27,7 @@ from radam import RAdam
 from ranger import Ranger
 from lookahead import LookaheadAdam
 from over9000 import Over9000
+from pytorch_toolbelt import losses as L
 
 
 from tqdm import tqdm_notebook as tqdm
@@ -53,15 +54,16 @@ class Trainer(object):
         if self.loss == 'BCE':
             self.criterion = torch.nn.BCEWithLogitsLoss()
         elif self.loss == 'BCE+DICE':
-            self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
+            self.criterion = L.JointLoss(L.DiceLoss("multilabel"), torch.nn.BCEWithLogitsLoss(), 1, 1) #MODIFIED
         elif self.loss == 'TVERSKY':
             self.criterion = Tversky()
 
         elif self.loss == 'Dice' or self.loss == 'DICE':
-            self.criterion = DiceLoss()
+            self.criterion = L.DiceLoss("multilabel")
             
         elif self.loss == 'BCE+DICE+JACCARD':
-            self.criterion = BCEDiceJaccardLoss(threshold=None)
+            self.criterion = L.JointLoss(L.JointLoss(L.DiceLoss("multilabel"), L.JaccardLoss("multilabel"), 1, 1), 
+                                         torch.nn.BCEWithLogitsLoss(), 1, 1)
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
 
@@ -155,7 +157,7 @@ class Trainer(object):
         if self.loss == 'TVERSKY':
             loss = self.criterion(outputs, masks)
         else: 
-            loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
+            loss = self.criterion(outputs.permute(0,2,3,1).contiguous(), masks.permute(0,2,3,1).contiguous())
         return loss, outputs
     
     def cutmix(self,batch, alpha):
@@ -191,6 +193,8 @@ class Trainer(object):
         for itr, batch in enumerate(tk0):
             if phase == "train" and self.do_cutmix:
                 images, targets = self.cutmix(batch, 0.5)
+            elif phase == 'train':
+                images,targets = batch
             else:
                 images, targets, pad_h, pad_w = batch
             loss, outputs = self.forward(images, targets)
