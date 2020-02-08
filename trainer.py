@@ -55,15 +55,10 @@ class Trainer(object):
             self.criterion = torch.nn.BCEWithLogitsLoss()
         elif self.loss == 'BCE+DICE':
             self.criterion = L.JointLoss(L.DiceLoss("multilabel"), torch.nn.BCEWithLogitsLoss(), 1, 1) #MODIFIED
-        elif self.loss == 'TVERSKY':
-            self.criterion = Tversky()
-
         elif self.loss == 'Dice' or self.loss == 'DICE':
             self.criterion = L.DiceLoss("multilabel")
-            
-        elif self.loss == 'BCE+DICE+JACCARD':
-            self.criterion = L.JointLoss(L.JointLoss(L.DiceLoss("multilabel"), L.JaccardLoss("multilabel"), 1, 1), 
-                                         torch.nn.BCEWithLogitsLoss(), 1, 1)
+        elif self.loss == 'JACCARD':
+            self.criterion = L.JaccardLoss("multilabel")
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
 
@@ -181,7 +176,6 @@ class Trainer(object):
         start = time.strftime("%H:%M:%S")
         print(f"Starting epoch: {epoch} | phase: {phase} | ⏰: {start}")
         batch_size = self.batch_size[phase]
-        self.net.train(phase == "train")
         dataloader = self.dataloaders[phase]
         running_loss = 0.0
         total_batches = len(dataloader)
@@ -198,6 +192,7 @@ class Trainer(object):
             loss = loss / self.accumulation_steps
             if phase == "train":
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1)
                 if (itr + 1 ) % self.accumulation_steps == 0:
                     self.optimizer.step()
                     self.optimizer.zero_grad()
