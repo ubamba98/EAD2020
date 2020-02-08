@@ -27,8 +27,6 @@ from radam import RAdam
 from ranger import Ranger
 from lookahead import LookaheadAdam
 from over9000 import Over9000
-from pytorch_toolbelt import losses as L
-
 
 from tqdm import tqdm_notebook as tqdm
 
@@ -54,11 +52,13 @@ class Trainer(object):
         if self.loss == 'BCE':
             self.criterion = torch.nn.BCEWithLogitsLoss()
         elif self.loss == 'BCE+DICE':
-            self.criterion = L.JointLoss(L.DiceLoss("multilabel"), torch.nn.BCEWithLogitsLoss(), 1, 1) #MODIFIED
+            self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
+        elif self.loss == 'TVERSKY':
+            self.criterion = Tversky()
         elif self.loss == 'Dice' or self.loss == 'DICE':
-            self.criterion = L.DiceLoss("multilabel")
-        elif self.loss == 'JACCARD':
-            self.criterion = L.JaccardLoss("multilabel")
+            self.criterion = DiceLoss()
+        elif self.loss == 'BCE+DICE+JACCARD':
+            self.criterion = BCEDiceJaccardLoss(threshold=None)
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
 
