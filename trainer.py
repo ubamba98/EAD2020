@@ -27,6 +27,7 @@ from radam import RAdam
 from ranger import Ranger
 from lookahead import LookaheadAdam
 from over9000 import Over9000
+from pytorch_toolbelt import losses as L
 
 
 from tqdm import tqdm_notebook as tqdm
@@ -53,15 +54,11 @@ class Trainer(object):
         if self.loss == 'BCE':
             self.criterion = torch.nn.BCEWithLogitsLoss()
         elif self.loss == 'BCE+DICE':
-            self.criterion = BCEDiceLoss(threshold=None)  #MODIFIED
-        elif self.loss == 'TVERSKY':
-            self.criterion = Tversky()
-
+            self.criterion = L.JointLoss(L.DiceLoss("multilabel"), torch.nn.BCEWithLogitsLoss(), 1, 1) #MODIFIED
         elif self.loss == 'Dice' or self.loss == 'DICE':
-            self.criterion = DiceLoss()
-            
-        elif self.loss == 'BCE+DICE+JACCARD':
-            self.criterion = BCEDiceJaccardLoss(threshold=None)
+            self.criterion = L.DiceLoss("multilabel")
+        elif self.loss == 'JACCARD':
+            self.criterion = L.JaccardLoss("multilabel")
         else:
             raise(Exception(f'{self.loss} is not recognized. Please provide a valid loss function.'))
 
@@ -152,10 +149,7 @@ class Trainer(object):
 #         Following two lines are commented due to redundancy. The case is already included in the else clause.
 #         if self.loss == 'BCE+DICE':
 #             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
-        if self.loss == 'TVERSKY':
-            loss = self.criterion(outputs, masks)
-        else: 
-            loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
+        loss = self.criterion(outputs, masks)
         return loss, outputs
     
     def cutmix(self,batch, alpha):
@@ -182,7 +176,6 @@ class Trainer(object):
         start = time.strftime("%H:%M:%S")
         print(f"Starting epoch: {epoch} | phase: {phase} | ⏰: {start}")
         batch_size = self.batch_size[phase]
-        self.net.train(phase == "train")
         dataloader = self.dataloaders[phase]
         running_loss = 0.0
         total_batches = len(dataloader)
@@ -191,12 +184,15 @@ class Trainer(object):
         for itr, batch in enumerate(tk0):
             if phase == "train" and self.do_cutmix:
                 images, targets = self.cutmix(batch, 0.5)
+            elif phase == 'train':
+                images,targets = batch
             else:
                 images, targets, pad_h, pad_w = batch
             loss, outputs = self.forward(images, targets)
             loss = loss / self.accumulation_steps
             if phase == "train":
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1)
                 if (itr + 1 ) % self.accumulation_steps == 0:
                     self.optimizer.step()
                     self.optimizer.zero_grad()

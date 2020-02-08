@@ -38,9 +38,9 @@ class EndoDataset(Dataset):
                 mask_re = np.zeros((5, dim[1], dim[0]))
                 for i in range(5):
                     mask_re[i] = cv2.resize(mask[i], dim, interpolation = cv2.INTER_NEAREST)
-                mask = (mask_re.transpose(1,2,0) > 0).astype('uint8')
+                mask = (mask_re.transpose(1,2,0) > 0).astype(np.uint8)
             else:
-                mask = (mask.transpose(1,2,0) > 0).astype('uint8')
+                mask = (mask.transpose(1,2,0) > 0).astype(np.uint8)
         else:
             (H, W) = img.shape[:2]
             mask = mask[:5, ...]
@@ -48,13 +48,14 @@ class EndoDataset(Dataset):
             pad_w = 0 if (W%128)==0 else 128-(W%128)
             img = np.pad(img, ((0, pad_h), (0, pad_w), (0, 0)))
             mask = np.pad(mask, ((0, 0), (0, pad_h), (0, pad_w)))
-            mask = (mask.transpose(1, 2, 0) > 0).astype('int')
-            
+            mask = (mask.transpose(1, 2, 0) > 0).astype(np.uint8)
+        mask*=255
         augmented = self.transforms(image=img, mask=mask)
         img = augmented['image']
         mask = augmented['mask']
         mask = mask[0].permute(2, 0, 1)
         if self.phase == 'train':
+#             print(np.unique(mask.numpy()))
             return img, mask
         else:
             return img,mask,pad_h,pad_w

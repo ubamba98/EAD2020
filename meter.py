@@ -21,17 +21,13 @@ def single_f2_coef(y_true, y_pred_bin):
     return f2_score
 
 def f2_pytorch_train(y_true, y_pred_bin):
-
     tp = (y_true * y_pred_bin).sum()#.to(torch.float32)
     tn = ((1 - y_true) * (1 - y_pred_bin)).sum()#.to(torch.float32)
     fp = ((1 - y_true) * y_pred_bin).sum()#.to(torch.float32)
     fn = (y_true * (1 - y_pred_bin)).sum()#.to(torch.float32)
-
     epsilon = 1e-10
-
     precision = tp / (tp + fp + epsilon)
     recall = tp / (tp + fn + epsilon)
-
     f2 = 5* (precision*recall) / (4*precision + recall + epsilon)
     return f2
 
@@ -58,9 +54,6 @@ def dice_metric_train(y_pred_bin, y_true, threshold = 0.5):
             channel_dice = single_dice_coef(y_true[i, j, ...],y_pred_bin[i, j, ...])
             mean_dice_channel += channel_dice/(channel_num*batch_size)
     return mean_dice_channel
-
-
-
 
 
 def f2_metric(y_pred_bin, y_true, threshold = 0.5):
