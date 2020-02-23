@@ -142,20 +142,10 @@ class Trainer(object):
         
     def forward(self, images, targets):
         images = images.to(self.device)
-        masks = targets.to(self.device)
         outputs = self.net(images)
-#         print(outputs.shape, masks.shape)
-
-#         Following two lines are commented due to redundancy. The case is already included in the else clause.
-#         if self.loss == 'BCE+DICE':
-#             loss = self.criterion(outputs.permute(0,2,3,1), masks.permute(0,2,3,1))
+        masks = targets.to(self.device)
         loss = self.criterion(outputs, masks)
         return loss, outputs
-    
-    def forward(self, images):
-        images = images.to(self.device)
-        outputs = self.net(images)
-        return outputs
     
     def cutmix(self,batch, alpha):
         data, targets = batch
@@ -197,8 +187,8 @@ class Trainer(object):
                 images, pad_h, pad_w, fname = batch
                 
             if phase == 'test':
-                outputs = self.forward(images)
-                outputs = outputs.detach().cpu().numpy()
+                images = images.to(self.device)
+                outputs = self.net(images).detach().cpu().numpy()
                 if pad_h == 0 and pad_w == 0:
                     outputs = outputs
                 elif pad_w == 0:
@@ -207,9 +197,9 @@ class Trainer(object):
                     outputs = outputs[:,:,:,:-pad_w]
                 else:
                     outputs = outputs[:,:,:-pad_h,:-pad_w]
-                outputs = outputs[0].transpose(1,2,0) #bs = 1
+                outputs = outputs[0]#.transpose(1,2,0) #bs = 1
                 outputs = 1/(1 + np.exp(-outputs)) 
-                outputs = (outputs>0.5).astype(np.uint8)
+                outputs = (outputs>0.5).astype(np.uint8)*255
 #                 print(outputs.shape)
                 tiff.imsave('../EndoCV2020_testSubmission/semantic_masks/'+fname[0], outputs)
     
@@ -227,7 +217,19 @@ class Trainer(object):
                 if phase == 'train':
                     meter.update(targets, outputs)
                 else:
-                    meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])
+                    if pad_h == 0 and pad_w == 0:
+                        outputs = outputs
+                        targets = targets
+                    elif pad_w == 0:
+                        outputs = outputs[:,:,:-pad_h,:]
+                        targets = targets[:,:,:-pad_h,:]
+                    elif pad_h == 0:
+                        outputs = outputs[:,:,:,:-pad_w]
+                        targets = targets[:,:,:,:-pad_w]
+                    else:
+                        outputs = outputs[:,:,:-pad_h,:-pad_w]
+                        targets = targets[:,:,:-pad_h,:-pad_w]
+                    meter.update(targets, outputs)
                 tk0.set_postfix(loss=(running_loss / ((itr + 1))))
         if phase == 'test':
             torch.cuda.empty_cache()
@@ -291,7 +293,14 @@ class Trainer(object):
             print()
             self.train_end()
             
+    def validate(self):
+        self.net.eval()
+        with torch.no_grad():
+            self.iterate(1,'val')
+        print('Done')
+        
     def predict(self):
         self.net.eval()
-        self.iterate(1,'test')
+        with torch.no_grad():
+            self.iterate(1,'test')
         print('Done')
