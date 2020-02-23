@@ -34,7 +34,7 @@ class Trainer(object):
     '''This class takes care of training and validation of our model'''
     def __init__(self,model, optim, loss, lr, bs, name, shape=512, crop_type=0):
         self.num_workers = 4
-        self.batch_size = {"train": bs, "val": 1}
+        self.batch_size = {"train": bs, "val": 1, "test": 1}
         self.accumulation_steps = bs // self.batch_size['train']
         self.lr = lr
         self.loss = loss
@@ -42,7 +42,7 @@ class Trainer(object):
         self.num_epochs = 0
         self.best_dice = 0.
         self.best_lb_metric = 0.
-        self.phases = ["train", "val"]
+        self.phases = ["train", "val", "test"]
         self.device = torch.device("cuda:0")
         torch.set_default_tensor_type("torch.cuda.FloatTensor")
         self.net = model
@@ -152,6 +152,11 @@ class Trainer(object):
         loss = self.criterion(outputs, masks)
         return loss, outputs
     
+    def forward(self, images):
+        images = images.to(self.device)
+        outputs = self.net(images)
+        return outputs
+    
     def cutmix(self,batch, alpha):
         data, targets = batch
         indices = torch.randperm(data.size(0))
@@ -186,32 +191,57 @@ class Trainer(object):
                 images, targets = self.cutmix(batch, 0.5)
             elif phase == 'train':
                 images,targets = batch
-            else:
+            elif phase == 'val' or phase == 'holdout':
                 images, targets, pad_h, pad_w = batch
-            loss, outputs = self.forward(images, targets)
-            loss = loss / self.accumulation_steps
-            if phase == "train":
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1)
-                if (itr + 1 ) % self.accumulation_steps == 0:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
-            running_loss += loss.item()
-            outputs = outputs.detach().cpu()
-            if phase == 'train':
-                meter.update(targets, outputs)
             else:
-                meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])
-            tk0.set_postfix(loss=(running_loss / ((itr + 1))))
-        epoch_loss = (running_loss * self.accumulation_steps) / total_batches
-        dice, iou, f2, lb_metric = epoch_log(phase, epoch, epoch_loss, meter, start)
-        self.losses[phase].append(epoch_loss)
-        self.dice_scores[phase].append(dice)
-        self.iou_scores[phase].append(iou)
-        self.F2_scores[phase].append(f2)
-        self.lb_metric[phase].append(lb_metric)
-        torch.cuda.empty_cache()
-        return epoch_loss, dice, lb_metric
+                images, pad_h, pad_w, fname = batch
+                
+            if phase == 'test':
+                outputs = self.forward(images)
+                outputs = outputs.detach().cpu().numpy()
+                if pad_h == 0 and pad_w == 0:
+                    outputs = outputs
+                elif pad_w == 0:
+                    outputs = outputs[:,:,:-pad_h,:]
+                elif pad_h == 0:
+                    outputs = outputs[:,:,:,:-pad_w]
+                else:
+                    outputs = outputs[:,:,:-pad_h,:-pad_w]
+                outputs = outputs[0].transpose(1,2,0) #bs = 1
+                outputs = 1/(1 + np.exp(-outputs)) 
+                outputs = (outputs>0.5).astype(np.uint8)
+#                 print(outputs.shape)
+                tiff.imsave('../EndoCV2020_testSubmission/semantic_masks/'+fname[0], outputs)
+    
+            else:
+                loss, outputs = self.forward(images, targets)
+                loss = loss / self.accumulation_steps
+                if phase == "train":
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1)
+                    if (itr + 1 ) % self.accumulation_steps == 0:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+                running_loss += loss.item()
+                outputs = outputs.detach().cpu()
+                if phase == 'train':
+                    meter.update(targets, outputs)
+                else:
+                    meter.update(targets[:,:,:-pad_h,:-pad_w], outputs[:,:,:-pad_h,:-pad_w])
+                tk0.set_postfix(loss=(running_loss / ((itr + 1))))
+        if phase == 'test':
+            torch.cuda.empty_cache()
+            
+        else:
+            epoch_loss = (running_loss * self.accumulation_steps) / total_batches
+            dice, iou, f2, lb_metric = epoch_log(phase, epoch, epoch_loss, meter, start)
+            self.losses[phase].append(epoch_loss)
+            self.dice_scores[phase].append(dice)
+            self.iou_scores[phase].append(iou)
+            self.F2_scores[phase].append(f2)
+            self.lb_metric[phase].append(lb_metric)
+            torch.cuda.empty_cache()
+            return epoch_loss, dice, lb_metric
 
     def train_end(self):
         train_dice = self.dice_scores["train"]
@@ -260,3 +290,8 @@ class Trainer(object):
                 torch.save(state, 'models/'+self.name+'_best_lb_metric.pth')
             print()
             self.train_end()
+            
+    def predict(self):
+        self.net.eval()
+        self.iterate(1,'test')
+        print('Done')
