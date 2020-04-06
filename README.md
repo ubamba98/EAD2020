@@ -1,5 +1,5 @@
 # EAD2020
-
+The code accompanying our submission to the EndoCV 2020 challenge. Full paper [here](https://arxiv.org/abs/2003.10129v1).
 
 ### How to Train:
  1. **Downloading and Preparing Dataset** : Download script.sh file  and run `bash script.sh` on terminal. This will install dependencies, download dataset and extract them to following folders:
